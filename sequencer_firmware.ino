@@ -117,7 +117,7 @@ void joystick_test()
         current_time = millis();
     while (current_time - start_time < test_time)
     {
-        //lcd.clear();
+        lcd.clear();
         lcd.setCursor(0, 0);
         lcd.print("Joystick test");
 
@@ -136,7 +136,7 @@ void joystick_test()
         delay(500);
         current_time = millis();
     }
-    //lcd.clear();
+    lcd.clear();
 }
 
 void step_pot_test()
@@ -201,14 +201,16 @@ void menu()
     current_state = 0;
     while (go == 1)
     {
-        // Only update the display if something changes.
+        // Only clear the display if something changes.
         if (current_state != previous_state) 
         {
             lcd.clear();
             previous_state = current_state;
-            lcd.setCursor(0, 1);
-            lcd.print(byte(current_state)); // Must be a byte, otherwise it pulls from the LCD's preset memory.
         }
+
+        // Display the menu item number.
+        lcd.setCursor(0, 1);
+        lcd.print(byte(current_state)); // Must be a byte, otherwise it prints a number rather than a character.
 
         // Read user inputs.
         select      = !digitalRead(joystick_b); // Button pulls low. Invert signal so that push -> 1.
