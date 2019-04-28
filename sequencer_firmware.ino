@@ -39,23 +39,25 @@ const unsigned char sck  = 10,
 const unsigned char ser_dly = 10;
 const unsigned long dac_setting = 0,
                     dac_limit = 0x3FFF, // maximum DAC output setting
-                    semi = dac_limit / 5.0 / 12; // DAC steps per semitone
+                    semi = dac_limit / 4.7 / 12; // DAC steps per semitone
 
 // Pattern mode variables
-unsigned char pattern_note[]   = "CDEFGABCBCCC",
-              pattern_octave[] = "2222222222223401";
+unsigned char possible_notes[13] = "CdDeEfgGaAbB",
+              pattern_note[17]   = "CCCCCCCCCCCCCCCC",
+              pattern_octave[17] = "0000000000000000";
 
-unsigned char pattern_length = 12, // Number of steps in pattern.
+unsigned char pattern_length = 16, // Number of steps in pattern.
               step = 0,
               cursor_position = 0,
               pattern_changed = 0;
 unsigned short SPM = 400; // steps per minute
 unsigned long pattern_start,
-              step_time;
+              step_time,
+              note;
 
 unsigned char debouncing = 0;
 unsigned long debounce_start;
-const unsigned long motion_delay = 300;
+const unsigned long motion_delay = 100;
 
 // Menu mode variables
 unsigned char previous_state = 0,
@@ -388,17 +390,21 @@ void sequence()
         // After changing a note, update the display.
         if (pattern_changed == 1)
         {
-            lcd.setCursor(cursor_position, 0);
-            lcd.write(pattern_note[cursor_position]);
             lcd.setCursor(cursor_position, 1);
             lcd.write(pattern_octave[cursor_position]);
+            lcd.setCursor(cursor_position, 0);
+            lcd.write(pattern_note[cursor_position]);
             pattern_changed = 0;
         }
-        
+
         // Move to the next step in the pattern if enough time has passed.
         step_time = 60000 / SPM;
         if (millis()-pattern_start > step_time*step)
         {
+            // Calculate the DAC setting.
+            note = (pattern_note[step] - 64 + ((pattern_octave[step] - 48) * 12)) * semi;
+            // Output the note voltage.
+            setDAC(note);
             // Go to the next step.
             step++;
         }
