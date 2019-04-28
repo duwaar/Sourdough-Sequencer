@@ -42,15 +42,19 @@ const int dac_limit = 0x3FFF, // maximum DAC output setting
           semi = dac_limit / 5.0 / 12; // DAC steps per semitone
 
 // Pattern mode variables
-unsigned char pattern_note[]   = "CDEFGABCBAGFEDCC",
-              pattern_octave[] = "2222222322222223",
-              pattern_length = 16,
-              step = 0,
-              debouncing = 0;
-unsigned long pattern_start,
-              debounce_start;
+unsigned char pattern_note[]   = "CdDeEFgGaAbBCCCC",
+              pattern_octave[] = "2222222222223401";
 
-unsigned long SPM = 400; // steps per minute
+unsigned char pattern_length = 16, // Number of steps in pattern.
+              step = 0,
+              cursor_position = 0;
+unsigned short SPM = 400; // steps per minute
+unsigned long pattern_start,
+              step_time;
+
+unsigned char debouncing = 0;
+unsigned long debounce_start;
+const unsigned long motion_delay = 300;
 
 // Menu mode variables
 unsigned char previous_state = 0,
@@ -62,10 +66,11 @@ const unsigned char option_pattern_mode  = 0,
 const unsigned long menu_delay = 300;
 
 // General variables
-const char pattern_mode = 0,
-           menu_mode    = 1;
-char previous_mode = 1,
-     current_mode  = 1;
+const unsigned char pattern_mode = 0,
+                    menu_mode    = 1;
+unsigned char previous_mode = 1,
+              current_mode  = 1,
+              go = 1;
 
 int current_time,
     start_time;
@@ -73,6 +78,8 @@ int current_time,
 int select     = 0,
     horizontal = 0,
     vertical   = 0;
+
+const unsigned int js_threshold = 10;
 
 
 /************************************************
@@ -196,7 +203,7 @@ void buttonDelay()
 
 void menu()
 {
-    char go = 1;
+    go = 1;
     previous_state = 1;
     current_state = 0;
     while (go == 1)
@@ -264,14 +271,14 @@ void menu()
         }
 
         // Change state if the joystick is pushed sideways.
-        if (horizontal < 512 - 10) {
+        if (horizontal < 512 - js_threshold) {
             delay(menu_delay);
             current_state++;
             if (current_state > 10){
                 current_state = 0;
             }
         }
-        else if (horizontal > 512 + 10) {
+        else if (horizontal > 512 + js_threshold) {
             delay(menu_delay);
             current_state--;
             if (current_state > 10){
@@ -283,8 +290,17 @@ void menu()
 
 void sequence()
 {
-    unsigned char go = 1;
-    unsigned long step_time;
+    // Display the initial pattern.
+    for (int i=0; i<pattern_length; i++)
+    {
+        lcd.setCursor(i, 0);
+        lcd.write(pattern_note[i]);
+        lcd.setCursor(i, 1);
+        lcd.write(pattern_octave[i]);
+    }
+
+    go = 1;
+    lcd.blink(); // Display the block-style cursor.
     pattern_start = millis();
     while (go == 1)
     {
@@ -302,6 +318,7 @@ void sequence()
         else if (select == 1 && millis()-debounce_start > 1000) // Debounce time has passed.
         {
             current_mode = menu_mode;
+            lcd.noBlink();
             lcd.clear();
             lcd.print("Menu");
             buttonDelay();
@@ -311,20 +328,31 @@ void sequence()
         {
             debouncing = 0;
         }
+
+        // Move the cursor if joystick moves horizontally.
+        if (horizontal < 512 - js_threshold) {
+            delay(motion_delay);
+            cursor_position++;
+            if (cursor_position > pattern_length){
+                cursor_position = 0;
+            }
+        }
+        else if (horizontal > 512 + js_threshold) {
+            delay(motion_delay);
+            cursor_position--;
+            if (cursor_position > pattern_length){
+                cursor_position = pattern_length;
+            }
+        }
+        lcd.setCursor(cursor_position, 0);
         
-        // Move to the next note if enough time has passed.
+        // Move to the next step in the pattern if enough time has passed.
         step_time = 60000 / SPM;
         if (millis()-pattern_start > step_time*step)
         {
-            // Display the current step.
-            lcd.setCursor(step, 0);
-            lcd.write(pattern_note[step]);
-            lcd.setCursor(step, 1);
-            lcd.write(pattern_octave[step]);
             // Go to the next step.
             step++;
         }
-
         // At the end of the pattern, start over.
         if (step > pattern_length-1)
         {
