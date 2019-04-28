@@ -36,7 +36,7 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 const unsigned char sck  = 10,
                     mosi = 11,
                     cs   = 12;
-const unsigned char ser_dly = 10;
+const unsigned char ser_dly = 2;
 const unsigned long dac_setting = 0,
                     dac_limit = 0x3FFF, // maximum DAC output setting
                     semi = dac_limit / 4.7 / 12; // DAC steps per semitone
@@ -57,9 +57,12 @@ unsigned long SPM = 400, // steps per minute
               step_time,
               note;
 
-unsigned char debouncing = 0;
-unsigned long debounce_start;
-const unsigned long motion_delay = 100;
+unsigned char stick_debouncing = 0,
+              button_debouncing = 0;
+unsigned long stick_db_start,
+              button_db_start;
+const unsigned long stick_db_delay = 100,
+                    button_db_delay = 1000;
 
 // Menu mode variables
 unsigned char previous_state = 0,
@@ -150,7 +153,7 @@ void joystick_test()
         lcd.print("B:");
         lcd.print(digitalRead(joystick_b));
 
-        delay(500);
+        delay(200);
         current_time = millis();
     }
     lcd.clear();
@@ -330,12 +333,12 @@ void sequence()
         log_2       = analogRead(log_pot_2);
 
         // Look for a button press-and-hold.
-        if (select == 1 && debouncing == 0) // Just started the debounce.
+        if (select == 1 && button_debouncing == 0) // Just started the debounce.
         {
-            debounce_start = millis();
-            debouncing = 1;
+            button_db_start = millis();
+            button_debouncing = 1;
         }
-        else if (select == 1 && millis()-debounce_start > 1000) // Debounce time has passed.
+        else if (select == 1 && millis()-button_db_start > button_db_delay) // Debounce time has passed.
         {
             current_mode = menu_mode;
             lcd.noBlink();
@@ -346,30 +349,37 @@ void sequence()
         }
         else if (select == 0) // Signal dissappears.
         {
-            debouncing = 0;
+            button_debouncing = 0;
         }
 
         // Move the cursor if joystick moves horizontally.
-        if (horizontal < 512 - js_threshold)
+        if (horizontal < 512 - js_threshold && stick_debouncing == 0)
         {
-            delay(motion_delay);
+            stick_db_start = millis();
+            stick_debouncing = 1;
+        }
+        else if (horizontal < 512 - js_threshold && millis() - button_db_start > stick_db_delay)
+        {
             cursor_position++;
             if (cursor_position > pattern_length-1)
             {
                 cursor_position = 0;
             }
         }
-        else if (horizontal > 512 + js_threshold)
+        else if (horizontal > 512 + js_threshold && millis() - button_db_start > stick_db_delay)
         {
-            delay(motion_delay);
             cursor_position--;
             if (cursor_position > pattern_length-1)
             {
                 cursor_position = pattern_length;
             }
         }
+        else if (horizontal < 512 + js_threshold && horizontal > 512 - js_threshold) // Signal dissappears.
+        {
+            stick_debouncing = 0;
+        }
         lcd.setCursor(cursor_position, 0);
-
+        /*
         // Change note if joystick moves vertically.
         if (vertical < 512 - js_threshold)
         {
@@ -413,6 +423,7 @@ void sequence()
             lcd.write(pattern_note[cursor_position]);
             pattern_changed = 0;
         }
+        */
 
         // Set tempo by knob input.
         SPM = setTempo();
