@@ -14,40 +14,41 @@
  ************************************************/
 
 // User inputs
-const char step_pot_1 = A5,
-           step_pot_2 = A2,
-           log_pot_1  = A3,
-           log_pot_2  = A4,
-           joystick_x = A1,
-           joystick_y = A0,
-           joystick_b = 9;
+const unsigned char step_pot_1 = A5,
+                    step_pot_2 = A2,
+                    log_pot_1  = A3,
+                    log_pot_2  = A4,
+                    joystick_x = A1,
+                    joystick_y = A0,
+                    joystick_b = 9;
 
 // LCD screen
-const char rs = 2,
-           rw = 3,
-           en = 4,
-           d4 = 5,
-           d5 = 6,
-           d6 = 7,
-           d7 = 8;
+const unsigned char rs = 2,
+                    rw = 3,
+                    en = 4,
+                    d4 = 5,
+                    d5 = 6,
+                    d6 = 7,
+                    d7 = 8;
 LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 
 // DAC chip (LTC1658)
-const char sck  = 10,
-           mosi = 11,
-           cs   = 12;
-const char ser_dly = 10;
-const long dac_setting = 0; 
-const int dac_limit = 0x3FFF, // maximum DAC output setting
-          semi = dac_limit / 5.0 / 12; // DAC steps per semitone
+const unsigned char sck  = 10,
+                    mosi = 11,
+                    cs   = 12;
+const unsigned char ser_dly = 10;
+const unsigned long dac_setting = 0,
+                    dac_limit = 0x3FFF, // maximum DAC output setting
+                    semi = dac_limit / 5.0 / 12; // DAC steps per semitone
 
 // Pattern mode variables
-unsigned char pattern_note[]   = "CdDeEFgGaAbBCCCC",
+unsigned char pattern_note[]   = "CDEFGABCBCCC",
               pattern_octave[] = "2222222222223401";
 
-unsigned char pattern_length = 16, // Number of steps in pattern.
+unsigned char pattern_length = 12, // Number of steps in pattern.
               step = 0,
-              cursor_position = 0;
+              cursor_position = 0,
+              pattern_changed = 0;
 unsigned short SPM = 400; // steps per minute
 unsigned long pattern_start,
               step_time;
@@ -72,12 +73,12 @@ unsigned char previous_mode = 1,
               current_mode  = 1,
               go = 1;
 
-int current_time,
-    start_time;
+unsigned long current_time,
+              start_time;
 
-int select     = 0,
-    horizontal = 0,
-    vertical   = 0;
+unsigned int select     = 0,
+             horizontal = 0,
+             vertical   = 0;
 
 const unsigned int js_threshold = 10;
 
@@ -291,12 +292,12 @@ void menu()
 void sequence()
 {
     // Display the initial pattern.
-    for (int i=0; i<pattern_length; i++)
+    for (step=0; step<pattern_length; step++)
     {
-        lcd.setCursor(i, 0);
-        lcd.write(pattern_note[i]);
-        lcd.setCursor(i, 1);
-        lcd.write(pattern_octave[i]);
+        lcd.setCursor(step, 0);
+        lcd.write(pattern_note[step]);
+        lcd.setCursor(step, 1);
+        lcd.write(pattern_octave[step]);
     }
 
     go = 1;
@@ -330,21 +331,69 @@ void sequence()
         }
 
         // Move the cursor if joystick moves horizontally.
-        if (horizontal < 512 - js_threshold) {
+        if (horizontal < 512 - js_threshold)
+        {
             delay(motion_delay);
             cursor_position++;
-            if (cursor_position > pattern_length){
+            if (cursor_position > pattern_length-1)
+            {
                 cursor_position = 0;
             }
         }
-        else if (horizontal > 512 + js_threshold) {
+        else if (horizontal > 512 + js_threshold)
+        {
             delay(motion_delay);
             cursor_position--;
-            if (cursor_position > pattern_length){
+            if (cursor_position > pattern_length-1)
+            {
                 cursor_position = pattern_length;
             }
         }
         lcd.setCursor(cursor_position, 0);
+
+        // Change note if joystick moves vertically.
+        if (vertical < 512 - js_threshold)
+        {
+            delay(motion_delay);
+            pattern_note[cursor_position]++;
+            pattern_changed = 1;
+        }
+        else if (vertical > 512 + js_threshold)
+        {
+            delay(motion_delay);
+            pattern_note[cursor_position]--;
+            pattern_changed = 1;
+
+        }
+        // Roll over to next octave.
+        if (pattern_note[cursor_position] > 'G')
+        {
+            pattern_note[cursor_position] = 'A';
+            pattern_octave[cursor_position] += 1;
+        }
+        else if (pattern_note[cursor_position] < 'A')
+        {
+            pattern_note[cursor_position] = 'G';
+            pattern_octave[cursor_position] -= 1;
+        }
+        // Wrap around between first and last octave.
+        if (pattern_octave[cursor_position] > '4')
+        {
+            pattern_octave[cursor_position] = '0';
+        }
+        else if (pattern_octave[cursor_position] < '0')
+        {
+            pattern_octave[cursor_position] = '4';
+        }
+        // After changing a note, update the display.
+        if (pattern_changed == 1)
+        {
+            lcd.setCursor(cursor_position, 0);
+            lcd.write(pattern_note[cursor_position]);
+            lcd.setCursor(cursor_position, 1);
+            lcd.write(pattern_octave[cursor_position]);
+            pattern_changed = 0;
+        }
         
         // Move to the next step in the pattern if enough time has passed.
         step_time = 60000 / SPM;
