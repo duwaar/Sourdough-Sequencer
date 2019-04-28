@@ -57,12 +57,6 @@ unsigned long SPM = 400, // steps per minute
               step_time,
               note;
 
-unsigned char stick_debouncing = 0,
-              button_debouncing = 0;
-unsigned long stick_db_start,
-              button_db_start;
-const unsigned long stick_db_delay = 100,
-                    button_db_delay = 1000;
 
 // Menu mode variables
 unsigned char previous_state = 0,
@@ -81,18 +75,25 @@ unsigned char previous_mode = 1,
               go = 1;
 
 unsigned long current_time,
-              start_time;
+              start_time,
+              stick_db_start,
+              button_db_start;
+const unsigned long stick_db_delay = 200,
+                    button_db_delay = 1000;
 
-unsigned int select     = 0,
-             horizontal = 0,
-             vertical   = 0,
-             step_1     = 0,
-             step_2     = 0,
-             log_1      = 0,
-             log_2      = 0;
+const unsigned short js_threshold = 10;
+unsigned char stick_h_debouncing = 0,
+              stick_v_debouncing = 0,
+              button_debouncing = 0;
 
+unsigned short select     = 0,
+               horizontal = 0,
+               vertical   = 0,
+               step_1     = 0,
+               step_2     = 0,
+               log_1      = 0,
+               log_2      = 0;
 
-const unsigned int js_threshold = 10;
 
 
 /************************************************
@@ -353,12 +354,31 @@ void sequence()
         }
 
         // Move the cursor if joystick moves horizontally.
-        if (horizontal < 512 - js_threshold && stick_debouncing == 0)
+        // Detect initial signal.
+        if (horizontal < 512 - js_threshold && stick_h_debouncing == 0)
         {
+            // First step is free ;)
+            cursor_position++;
+            if (cursor_position > pattern_length-1)
+            {
+                cursor_position = 0;
+            }
             stick_db_start = millis();
-            stick_debouncing = 1;
+            stick_h_debouncing = 1;
         }
-        else if (horizontal < 512 - js_threshold && millis() - button_db_start > stick_db_delay)
+        else if (horizontal > 512 + js_threshold && stick_h_debouncing == 0)
+        {
+            // First step is free ;)
+            cursor_position--;
+            if (cursor_position > pattern_length-1)
+            {
+                cursor_position = pattern_length;
+            }
+            stick_db_start = millis();
+            stick_h_debouncing = 1;
+        }
+        // If joystick is held left or right, step again.
+        else if (horizontal < 512 - js_threshold && millis() - stick_db_start > stick_db_delay)
         {
             cursor_position++;
             if (cursor_position > pattern_length-1)
@@ -366,7 +386,7 @@ void sequence()
                 cursor_position = 0;
             }
         }
-        else if (horizontal > 512 + js_threshold && millis() - button_db_start > stick_db_delay)
+        else if (horizontal > 512 + js_threshold && millis() - stick_db_start > stick_db_delay)
         {
             cursor_position--;
             if (cursor_position > pattern_length-1)
@@ -374,26 +394,47 @@ void sequence()
                 cursor_position = pattern_length;
             }
         }
-        else if (horizontal < 512 + js_threshold && horizontal > 512 - js_threshold) // Signal dissappears.
+        // Signal dissappears.
+        else if (horizontal < 512 + js_threshold && horizontal > 512 - js_threshold)
         {
-            stick_debouncing = 0;
+            stick_h_debouncing = 0;
         }
         lcd.setCursor(cursor_position, 0);
-        /*
+
         // Change note if joystick moves vertically.
-        if (vertical < 512 - js_threshold)
+        if (vertical < 512 - js_threshold && stick_v_debouncing == 0)
         {
-            delay(motion_delay);
+            // First step is free ;)
+            pattern_note[cursor_position]++;
+            pattern_changed = 1;
+            stick_db_start = millis();
+            stick_v_debouncing = 1;
+        }
+        else if (vertical > 512 + js_threshold && stick_v_debouncing == 0)
+        {
+            // First step is free ;)
+            pattern_note[cursor_position]--;
+            pattern_changed = 1;
+            stick_db_start = millis();
+            stick_v_debouncing = 1;
+        }
+        // If stick is held, step again.
+        else if (vertical < 512 - js_threshold && millis() - button_db_start > stick_db_delay)
+        {
             pattern_note[cursor_position]++;
             pattern_changed = 1;
         }
-        else if (vertical > 512 + js_threshold)
+        else if (vertical > 512 + js_threshold && millis() - button_db_start > stick_db_delay)
         {
-            delay(motion_delay);
             pattern_note[cursor_position]--;
             pattern_changed = 1;
-
         }
+        // Signal dissappears.
+        else if (vertical < 512 + js_threshold && vertical > 512 - js_threshold)
+        {
+            stick_v_debouncing = 0;
+        }
+
         // Roll over to next octave.
         if (pattern_note[cursor_position] > 'G')
         {
@@ -405,6 +446,7 @@ void sequence()
             pattern_note[cursor_position] = 'G';
             pattern_octave[cursor_position] -= 1;
         }
+
         // Wrap around between first and last octave.
         if (pattern_octave[cursor_position] > '4')
         {
@@ -414,6 +456,7 @@ void sequence()
         {
             pattern_octave[cursor_position] = '4';
         }
+
         // After changing a note, update the display.
         if (pattern_changed == 1)
         {
@@ -423,7 +466,6 @@ void sequence()
             lcd.write(pattern_note[cursor_position]);
             pattern_changed = 0;
         }
-        */
 
         // Set tempo by knob input.
         SPM = setTempo();
