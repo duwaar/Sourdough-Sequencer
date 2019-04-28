@@ -43,15 +43,17 @@ const unsigned long dac_setting = 0,
 
 // Pattern mode variables
 unsigned char possible_notes[13] = "CdDeEfgGaAbB",
-              pattern_note[17]   = "CCCCCCCCCCCCCCCC",
+              pattern_note[17]   = "CDCDCDCDCDCDCDCD",
               pattern_octave[17] = "0000000000000000";
 
 unsigned char pattern_length = 16, // Number of steps in pattern.
               step = 0,
               cursor_position = 0,
               pattern_changed = 0;
-unsigned short SPM = 400; // steps per minute
-unsigned long pattern_start,
+unsigned long SPM = 400, // steps per minute
+              SPM_max = 800,
+              SPM_min = 15,
+              pattern_start,
               step_time,
               note;
 
@@ -80,7 +82,12 @@ unsigned long current_time,
 
 unsigned int select     = 0,
              horizontal = 0,
-             vertical   = 0;
+             vertical   = 0,
+             step_1     = 0,
+             step_2     = 0,
+             log_1      = 0,
+             log_2      = 0;
+
 
 const unsigned int js_threshold = 10;
 
@@ -180,6 +187,8 @@ void log_pot_test()
         current_time = millis();
     while (current_time - start_time < test_time)
     {
+        lcd.print("Log pot test");
+
         lcd.setCursor(0, 1);
         lcd.print("LP1:");
         lcd.print(analogRead(log_pot_1));
@@ -190,8 +199,8 @@ void log_pot_test()
 
         delay(200);
         current_time = millis();
+        lcd.clear();
     }
-    lcd.clear();
 }
 
 void buttonDelay()
@@ -227,7 +236,7 @@ void menu()
         horizontal  = analogRead(joystick_x);
         vertical    = analogRead(joystick_y);
 
-        // When button is pressed, execute selected option.
+        // Show option, and when button is pressed, execute selected option.
         if (current_state == option_joystick_test) // Test joystick input.
         {
             lcd.setCursor(0, 0);
@@ -270,7 +279,7 @@ void menu()
         else // Otherwise, report empty menu spot.
         {
             lcd.setCursor(0, 0);
-            lcd.print("no menu option");
+            lcd.print("Coming soon!");
         }
 
         // Change state if the joystick is pushed sideways.
@@ -289,6 +298,13 @@ void menu()
             }
         }
     }
+}
+
+unsigned int setTempo()
+{
+    log_2 = analogRead(log_pot_2);
+    SPM = ((SPM_max - SPM_min) * log_2 / 1024) + SPM_min;
+    return SPM;
 }
 
 void sequence()
@@ -311,6 +327,7 @@ void sequence()
         select      = !digitalRead(joystick_b); // Button pulls low. Invert signal so that push -> 1.
         horizontal  = analogRead(joystick_x);
         vertical    = analogRead(joystick_y);
+        log_2       = analogRead(log_pot_2);
 
         // Look for a button press-and-hold.
         if (select == 1 && debouncing == 0) // Just started the debounce.
@@ -397,6 +414,9 @@ void sequence()
             pattern_changed = 0;
         }
 
+        // Set tempo by knob input.
+        SPM = setTempo();
+
         // Move to the next step in the pattern if enough time has passed.
         step_time = 60000 / SPM;
         if (millis()-pattern_start > step_time*step)
@@ -424,6 +444,8 @@ void sequence()
 
 void setup()
 {
+    Serial.begin(9600);
+
     // User input pin setup
     pinMode(step_pot_1, INPUT);
     pinMode(step_pot_2, INPUT);
