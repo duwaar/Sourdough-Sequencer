@@ -42,21 +42,27 @@ const unsigned long dac_setting = 0,
                     semi = dac_limit / 4.7 / 12; // DAC steps per semitone
 
 // Pattern mode variables
-unsigned char possible_notes[13] = "CdDeEfgGaAbB",
-              pattern_note[17]   = "CDCDCDCDCDCDCDCD",
+unsigned char pattern_note[17]   = "CDCDCDCDCDCDCDCD",
               pattern_octave[17] = "0000000000000000";
+
+                            //a  A  b  B  C  d  D  e  E  F  g  G 
+unsigned char possible_notes[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11, // octave 0
+                                  12,13,14,15,16,17,18,19,20,21,22,23, // octave 1
+                                  24,25,26,27,28,29,30,31,32,33,34,35, // octave 2
+                                  36,37,38,39,40,41,42,43,44,45,46,47, // octave 3
+                                  48,49,50,51,52,53,54,55,56,57,58,59 }// octave 4
 
 unsigned char pattern_length = 16, // Number of steps in pattern.
               step = 0,
               cursor_position = 0,
               pattern_changed = 0;
+
 unsigned long SPM = 400, // steps per minute
               SPM_max = 800,
               SPM_min = 15,
               pattern_start,
               step_time,
               note;
-
 
 // Menu mode variables
 unsigned char previous_state = 0,
@@ -78,7 +84,7 @@ unsigned long current_time,
               start_time,
               stick_db_start,
               button_db_start;
-const unsigned long stick_db_delay = 200,
+const unsigned long stick_db_delay = 100,
                     button_db_delay = 1000;
 
 const unsigned short js_threshold = 10;
@@ -304,11 +310,23 @@ void menu()
     }
 }
 
-unsigned int setTempo()
+unsigned short setTempo()
 {
     log_2 = analogRead(log_pot_2);
     SPM = ((SPM_max - SPM_min) * log_2 / 1024) + SPM_min;
     return SPM;
+}
+
+signed char findIndex(char character, char list[])
+{
+    for (char i=0; i<sizeof(list)-1; i++)
+    {
+        if (character == list[i])
+        {
+            return i;
+        }
+    }
+    return -1;
 }
 
 void sequence()
@@ -385,14 +403,16 @@ void sequence()
             {
                 cursor_position = 0;
             }
+            stick_db_start = millis();
         }
         else if (horizontal > 512 + js_threshold && millis() - stick_db_start > stick_db_delay)
         {
             cursor_position--;
             if (cursor_position > pattern_length-1)
             {
-                cursor_position = pattern_length;
+                cursor_position = pattern_length-1;
             }
+            stick_db_start = millis();
         }
         // Signal dissappears.
         else if (horizontal < 512 + js_threshold && horizontal > 512 - js_threshold)
@@ -419,15 +439,17 @@ void sequence()
             stick_v_debouncing = 1;
         }
         // If stick is held, step again.
-        else if (vertical < 512 - js_threshold && millis() - button_db_start > stick_db_delay)
+        else if (vertical < 512 - js_threshold && millis() - stick_db_start > stick_db_delay)
         {
             pattern_note[cursor_position]++;
             pattern_changed = 1;
+            stick_db_start = millis();
         }
-        else if (vertical > 512 + js_threshold && millis() - button_db_start > stick_db_delay)
+        else if (vertical > 512 + js_threshold && millis() - stick_db_start > stick_db_delay)
         {
             pattern_note[cursor_position]--;
             pattern_changed = 1;
+            stick_db_start = millis();
         }
         // Signal dissappears.
         else if (vertical < 512 + js_threshold && vertical > 512 - js_threshold)
@@ -468,7 +490,7 @@ void sequence()
         }
 
         // Set tempo by knob input.
-        SPM = setTempo();
+        //SPM = setTempo();
 
         // Move to the next step in the pattern if enough time has passed.
         step_time = 60000 / SPM;
