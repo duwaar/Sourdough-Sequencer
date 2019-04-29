@@ -35,34 +35,39 @@ LiquidCrystal lcd(rs, en, d4, d5, d6, d7);
 // DAC chip (LTC1658)
 const unsigned char sck  = 10,
                     mosi = 11,
-                    cs   = 12;
-const unsigned char ser_dly = 2;
+                    cs   = 12,
+                    ser_dly = 2;
 const unsigned long dac_setting = 0,
                     dac_limit = 0x3FFF, // maximum DAC output setting
                     semi = dac_limit / 4.7 / 12; // DAC steps per semitone
 
 // Pattern mode variables
-unsigned char pattern_note[17]   = "CDCDCDCDCDCDCDCD",
-              pattern_octave[17] = "0000000000000000";
+unsigned char pattern[] = {16,18,20,21, 23,25,27,28, 16,20,23,28, 23,20,16,28};
 
-                            //a  A  b  B  C  d  D  e  E  F  g  G 
-unsigned char possible_notes[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11, // octave 0
-                                  12,13,14,15,16,17,18,19,20,21,22,23, // octave 1
-                                  24,25,26,27,28,29,30,31,32,33,34,35, // octave 2
-                                  36,37,38,39,40,41,42,43,44,45,46,47, // octave 3
-                                  48,49,50,51,52,53,54,55,56,57,58,59 }// octave 4
+                                //C  d  D  e  E  F  g  G  a  A  b  B 
+unsigned char possible_notes[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10,11,  // octave 0
+                                  12,13,14,15,16,17,18,19,20,21,22,23,  // octave 1
+                                  24,25,26,27,28,29,30,31,32,33,34,35,  // octave 2
+                                  36,37,38,39,40,41,42,43,44,45,46,47,  // octave 3
+                                  48,49,50,51,52,53,54,55,56,57,58,59 },// octave 4
+              note_names[] = "CdDeEFgGaAbB",
+              note_octaves[] = {'0', '1', '2', '3', '4'};
 
 unsigned char pattern_length = 16, // Number of steps in pattern.
               step = 0,
+              note_name,
+              note_name_index,
+              note_octave,
+              note_octave_index,
               cursor_position = 0,
               pattern_changed = 0;
+unsigned long note;
 
 unsigned long SPM = 400, // steps per minute
               SPM_max = 800,
               SPM_min = 15,
-              pattern_start,
-              step_time,
-              note;
+              pattern_start;
+double step_time;
 
 // Menu mode variables
 unsigned char previous_state = 0,
@@ -317,27 +322,20 @@ unsigned short setTempo()
     return SPM;
 }
 
-signed char findIndex(char character, char list[])
-{
-    for (char i=0; i<sizeof(list)-1; i++)
-    {
-        if (character == list[i])
-        {
-            return i;
-        }
-    }
-    return -1;
-}
-
 void sequence()
 {
     // Display the initial pattern.
     for (step=0; step<pattern_length; step++)
     {
-        lcd.setCursor(step, 0);
-        lcd.write(pattern_note[step]);
+        note_octave_index = (pattern[step] + 1) / 12;
+        note_octave = note_octaves[note_octave_index];
         lcd.setCursor(step, 1);
-        lcd.write(pattern_octave[step]);
+        lcd.write(note_octave);
+
+        note_name_index = (pattern[step]) % 12;
+        note_name = note_names[note_name_index];
+        lcd.setCursor(step, 0);
+        lcd.write(note_name);
     }
 
     go = 1;
@@ -425,7 +423,7 @@ void sequence()
         if (vertical < 512 - js_threshold && stick_v_debouncing == 0)
         {
             // First step is free ;)
-            pattern_note[cursor_position]++;
+            pattern[cursor_position]++;
             pattern_changed = 1;
             stick_db_start = millis();
             stick_v_debouncing = 1;
@@ -433,7 +431,7 @@ void sequence()
         else if (vertical > 512 + js_threshold && stick_v_debouncing == 0)
         {
             // First step is free ;)
-            pattern_note[cursor_position]--;
+            pattern[cursor_position]--;
             pattern_changed = 1;
             stick_db_start = millis();
             stick_v_debouncing = 1;
@@ -441,13 +439,13 @@ void sequence()
         // If stick is held, step again.
         else if (vertical < 512 - js_threshold && millis() - stick_db_start > stick_db_delay)
         {
-            pattern_note[cursor_position]++;
+            pattern[cursor_position]++;
             pattern_changed = 1;
             stick_db_start = millis();
         }
         else if (vertical > 512 + js_threshold && millis() - stick_db_start > stick_db_delay)
         {
-            pattern_note[cursor_position]--;
+            pattern[cursor_position]--;
             pattern_changed = 1;
             stick_db_start = millis();
         }
@@ -457,35 +455,27 @@ void sequence()
             stick_v_debouncing = 0;
         }
 
-        // Roll over to next octave.
-        if (pattern_note[cursor_position] > 'G')
-        {
-            pattern_note[cursor_position] = 'A';
-            pattern_octave[cursor_position] += 1;
-        }
-        else if (pattern_note[cursor_position] < 'A')
-        {
-            pattern_note[cursor_position] = 'G';
-            pattern_octave[cursor_position] -= 1;
-        }
-
         // Wrap around between first and last octave.
-        if (pattern_octave[cursor_position] > '4')
+        if (pattern[cursor_position] > 59)
         {
-            pattern_octave[cursor_position] = '0';
+            pattern[cursor_position] = 0;
         }
-        else if (pattern_octave[cursor_position] < '0')
+        else if (pattern[cursor_position] > 59)
         {
-            pattern_octave[cursor_position] = '4';
+            pattern[cursor_position] = 59;
         }
 
         // After changing a note, update the display.
         if (pattern_changed == 1)
         {
+            note_octave = note_octaves[pattern[cursor_position] / 12];
             lcd.setCursor(cursor_position, 1);
-            lcd.write(pattern_octave[cursor_position]);
+            lcd.write(note_octave);
+
+            note_name = note_names[pattern[cursor_position] % 12];
             lcd.setCursor(cursor_position, 0);
-            lcd.write(pattern_note[cursor_position]);
+            lcd.write(note_name);
+
             pattern_changed = 0;
         }
 
@@ -497,7 +487,7 @@ void sequence()
         if (millis()-pattern_start > step_time*step)
         {
             // Calculate the DAC setting.
-            note = (pattern_note[step] - 64 + ((pattern_octave[step] - 48) * 12)) * semi;
+            note = pattern[step] * semi;
             // Output the note voltage.
             setDAC(note);
             // Go to the next step.
